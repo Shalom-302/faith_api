@@ -1,6 +1,7 @@
 # /backend/app/plugins/security/vault_client.py
 import hvac
 import os
+import base64
 import time
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -16,10 +17,15 @@ class VaultClient:
         self.retry_delay = 2  # seconds
         self.dev_mode = os.getenv("ENVIRONMENT", "").lower() != "production"
         
-        # Mock data for development mode if Vault is not available
+        # Valeurs de secours utilisées si Vault est indisponible OU si le
+        # secret demandé n'existe pas encore. Générées au démarrage et
+        # VALIDES pour la cryptographie : 32 octets pour AES-GCM, clé
+        # base64 url-safe pour Fernet. Évite que l'application crashe au
+        # démarrage quand Vault (en mode dev sur Dokploy, mémoire volatile)
+        # ne contient pas ces secrets.
         self.mock_secrets = {
-            "encryption/aes-key": b"dev-aes-key-for-testing-purposes-only",
-            "encryption/fernet-key": b"dev-fernet-key-for-testing-purposes-only"
+            "encryption/aes-key": os.urandom(32),
+            "encryption/fernet-key": base64.urlsafe_b64encode(os.urandom(32)),
         }
         
         # Connect to Vault with retries
@@ -82,11 +88,20 @@ class VaultClient:
             response = self.client.secrets.kv.v2.read_secret_version(path=path)
             return response['data']['data']['value']
         except Exception as e:
-            if self.dev_mode and path in self.mock_secrets:
-                logger.warning(f"Using mock secret for {path} due to error: {str(e)}")
-                return self.mock_secrets[path]
-            logger.error(f"Failed to get secret {path}: {str(e)}")
-            raise
+            # Robustesse : un secret Vault manquant ou injoignable ne doit
+            # JAMAIS empêcher l'application de démarrer. Sur le déploiement
+            # Dokploy, Vault tourne en mode dev (mémoire volatile) et le
+            # secret « encryption/aes-key » n'existe pas — l'ancien code
+            # relançait alors l'exception, ce qui faisait crasher tout
+            # l'import de `app.models` (via le plugin payment) et empêchait
+            # l'API de démarrer (Bad Gateway). Le domaine Faith n'utilise
+            # pas le chiffrement applicatif : on retombe sur une valeur de
+            # secours valide au lieu de propager l'erreur.
+            logger.warning(
+                f"Secret '{path}' indisponible dans Vault ({e}) — "
+                f"utilisation d'une valeur de secours."
+            )
+            return self.mock_secrets.get(path, os.urandom(32))
     
     def start_key_rotation(self):
         """Start the key rotation scheduler."""

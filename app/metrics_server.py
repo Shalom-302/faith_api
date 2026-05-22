@@ -22,9 +22,12 @@ REGISTRY = CollectorRegistry()
 HTTP_REQUESTS = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'], registry=REGISTRY)
 REQUEST_LATENCY = Summary('http_request_duration_seconds', 'HTTP request latency', registry=REGISTRY)
 
-# Server metrics
-REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', registry=REGISTRY)
-REQUEST_DURATION = Histogram('http_request_duration_seconds', 'HTTP request duration in seconds', registry=REGISTRY)
+# Note : REQUEST_COUNT / REQUEST_DURATION redéfinissaient ici les MÊMES noms
+# de métriques (« http_requests_total » et « http_request_duration_seconds »)
+# que HTTP_REQUESTS / REQUEST_LATENCY ci-dessus → ValueError « Duplicated
+# timeseries in CollectorRegistry » qui faisait crasher le serveur de metrics
+# en boucle. Supprimés : ce serveur n'expose que DISK_FREE, le reste des
+# métriques HTTP est géré dans main.py.
 
 # System metrics
 DISK_FREE = Gauge('system_disk_free_bytes', 'Free disk space in bytes', registry=REGISTRY)

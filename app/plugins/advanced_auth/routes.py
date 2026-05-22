@@ -51,15 +51,23 @@ async def login(
     Authenticate a user and return tokens.
     """
     auth_service = AuthService(db)
-    
+
+    # Nettoyage défensif de l'identifiant. Certains claviers mobiles,
+    # gestionnaires de mots de passe et outils de test ajoutent un octet
+    # NUL (\x00) en fin de chaîne. PostgreSQL rejette tout littéral SQL
+    # contenant un NUL : la requête de login échouait alors en erreur 500
+    # (« A string literal cannot contain NUL (0x00) characters »).
+    # On retire le NUL et les espaces superflus avant toute utilisation.
+    username = form_data.username.replace("\x00", "").strip()
+
     try:
-        logger.info(f"LOGIN ATTEMPT - Username: {form_data.username}")
+        logger.info(f"LOGIN ATTEMPT - Username: {username}")
         logger.info(f"LOGIN ATTEMPT - Password length: {len(form_data.password)}")
         logger.info(f"LOGIN ATTEMPT - Remember me: {remember_me}")
         logger.info(f"LOGIN ATTEMPT - Form data scopes: {form_data.scopes}")
         logger.info(f"LOGIN ATTEMPT - Form data client_id: {form_data.client_id}")
-        
-        user = await auth_service.authenticate_user(form_data.username, form_data.password)
+
+        user = await auth_service.authenticate_user(username, form_data.password)
         logger.info(f"User authenticated: {user.email}, creating tokens")
         
         tokens = await auth_service.create_tokens(user, remember_me)
