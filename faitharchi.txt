@@ -1,0 +1,243 @@
+Voici un **résumé clair** du diagramme :
+
+---
+
+### 🎯 **Résumé fonctionnel de l’application "Faith"**
+
+L'application se structure autour de **6 grands modules fonctionnels** :
+
+1. **Authentification**
+
+   * Inscription et connexion des utilisateurs
+   * Gestion des rôles (admin, prédicateur, fidèle, évangéliste, invité)
+
+2. **Sermons**
+
+   * Les prédicateurs et évangélistes publient des prédications
+   * Tous les utilisateurs (sauf invités) peuvent liker et commenter
+   * Les fidèles et invités peuvent consulter les sermons
+
+3. **Témoignages**
+
+   * Les fidèles publient leurs témoignages
+   * Tout le monde peut les consulter
+
+4. **Questions & Réponses**
+
+   * Les fidèles posent des questions
+   * Les prédicateurs et évangélistes répondent
+   * Tous les utilisateurs peuvent consulter les réponses
+
+5. **Social**
+
+   * Les fidèles peuvent envoyer et gérer des demandes d’amitié
+   * Consultation de la liste d’amis
+
+6. **Messagerie**
+
+   * Envoi et lecture de messages entre utilisateurs fidèles, prédicateurs et évangélistes
+
+7. **Administration**
+
+   * L’administrateur gère les utilisateurs et modère les contenus
+
+---
+
+### 👤 **Rôles et permissions**
+
+* **Fidèle** : très actif, peut publier, liker, commenter, poser des questions, se faire des amis, discuter.
+* **Prédicateur / Évangéliste** : publient des sermons, répondent aux questions, échangent par message.
+* **Administrateur** : supervise, modère, gère les accès.
+* **Invité** : simple visiteur, accès limité à la lecture des sermons et témoignages.
+
+---
+
+
+Use Cases 
+graph TB
+
+%% === MODULES ===
+subgraph AUTHENTIFICATION
+  A1[Sign Up]
+  A2[Sign In]
+  A3[Gestion des rôles]
+end
+
+subgraph SERMONS
+  S1[Publier une prédication]
+  S2[Commenter une prédication]
+  S3[Liker une prédication]
+  S4[Consulter les sermons]
+end
+
+subgraph TEMOIGNAGES
+  T1[Publier un témoignage]
+  T2[Consulter les témoignages]
+end
+
+subgraph QUESTIONS
+  Q1[Poser une question]
+  Q2[Répondre à une question]
+  Q3[Consulter les réponses]
+end
+
+subgraph SOCIAL
+  F1[Envoyer une demande d’amitié]
+  F2[Accepter ou refuser une demande]
+  F3[Consulter ses amis]
+end
+
+subgraph MESSAGERIE
+  M1[Envoyer un message]
+  M2[Lire les messages]
+end
+
+subgraph ADMINISTRATION
+  AD1[Gérer les utilisateurs]
+  AD2[Modérer les contenus]
+end
+
+%% === ACTEURS ===
+U[Fidèle]
+P[Prédicateur]
+E[Évangéliste]
+A[Administrateur]
+G[Invité]
+
+%% === LIENS : Fidèle ===
+U --> A1
+U --> A2
+U --> S4
+U --> S2
+U --> S3
+U --> T1
+U --> T2
+U --> Q1
+U --> Q3
+U --> F1
+U --> F2
+U --> F3
+U --> M1
+U --> M2
+
+%% === LIENS : Prédicateur ===
+P --> A1
+P --> A2
+P --> S1
+P --> Q2
+P --> M1
+P --> M2
+
+%% === LIENS : Évangéliste ===
+E --> A1
+E --> A2
+E --> S1
+E --> Q2
+E --> M1
+E --> M2
+
+%% === LIENS : Administrateur ===
+A --> A3
+A --> AD1
+A --> AD2
+
+%% === LIENS : Invité ===
+G --> S4
+G --> T2
+-----------------------------------
+Class 
+classDiagram
+
+class Profile {
+  +UUID id
+  +String username
+  +String full_name
+  +String avatar_url
+  +String role
+  +DateTime created_at
+}
+
+class Admin
+class Predicateur
+class Evangeliste
+class Fidele
+
+Admin <|-- Profile
+Predicateur <|-- Profile
+Evangeliste <|-- Profile
+Fidele <|-- Profile
+
+class Sermon {
+  +UUID id
+  +UUID user_id
+  +String title
+  +String content
+  +String media_url
+  +DateTime created_at
+}
+
+class Testimony {
+  +UUID id
+  +UUID user_id
+  +String content
+  +DateTime created_at
+}
+
+class Question {
+  +UUID id
+  +UUID user_id
+  +String question_text
+  +Boolean is_answered
+  +DateTime created_at
+}
+
+class Answer {
+  +UUID id
+  +UUID question_id
+  +UUID user_id
+  +String answer_text
+  +DateTime created_at
+}
+
+class Friendship {
+  +UUID user_id_1
+  +UUID user_id_2
+  +String status
+  +DateTime created_at
+}
+
+class Like {
+  +UUID id
+  +UUID user_id
+  +UUID sermon_id
+}
+
+class Comment {
+  +UUID id
+  +UUID user_id
+  +UUID sermon_id
+  +String content
+  +DateTime created_at
+}
+
+class Message {
+  +UUID id
+  +UUID sender_id
+  +UUID receiver_id
+  +String content
+  +DateTime sent_at
+}
+
+Profile --> Sermon : poste
+Profile --> Testimony : ecrit
+Profile --> Question : pose
+Profile --> Answer : repond
+Question --> Answer : reçoit
+Profile --> Friendship : connecte
+Profile --> Like : like
+Sermon --> Like : reçoit
+Profile --> Comment : commente
+Sermon --> Comment : reçoit
+Profile --> Message : envoie
+Message --> Profile : reçoit
+-----------------------------------------
