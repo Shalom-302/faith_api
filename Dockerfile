@@ -56,5 +56,6 @@ COPY . .
 # Exposer le port
 EXPOSE 8000
 
-# Commande par défaut
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Commande par défaut (production : pas de --reload).
+# En déploiement Dokploy, docker-compose surcharge de toute façon `command`.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

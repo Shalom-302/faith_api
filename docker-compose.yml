@@ -1,178 +1,160 @@
+# ===================================================================
+# Docker Compose — DÉPLOIEMENT DOKPLOY (branche dokploy)
+# -------------------------------------------------------------------
+# Services préfixés `faith-` pour cohabiter sans collision avec les
+# autres projets déployés sur le même `dokploy-network` (réseau partagé).
+# Le routage HTTPS/domaine est géré par Dokploy (Traefik) vers le
+# service `faith-api` sur le port 8000 — aucun port n'est exposé ici.
+# ===================================================================
 
 services:
-  api:
-    # SEUL CE SERVICE A LE DROIT DE CONSTRUIRE L'IMAGE
+  faith-api:
     build:
       context: .
       dockerfile: Dockerfile
-    image: kaapi-app:latest # Il construit et nomme l'image
-    container_name: kaapi-api
-    ports:
-      # API Faith Social exposée sur le port 8002 de l'hôte
-      # (le conteneur écoute en interne sur 8000).
-      - "8002:8000"
-    volumes:
-      - .:/app
+    image: faith-api:latest
+    restart: always
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@kaapi-db:5432/kaapi
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=development
-      - PYTHONUNBUFFERED=1
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=dev-token
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - MINIO_SECURE=false
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
-    tty: true
+      # config.py construit l'URL DB à partir de ces variables.
+      # POSTGRES_HOST DOIT correspondre au nom du service postgres ci-dessous.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kaapi
+      POSTGRES_HOST: faith-db
+      REDIS_HOST: faith-redis
+      REDIS_PORT: 6379
+      ENVIRONMENT: production
+      PYTHONUNBUFFERED: 1
+      VAULT_ADDR: http://faith-vault:8200
+      VAULT_TOKEN: dev-token
+      MINIO_ENDPOINT: faith-minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_SECURE: "false"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
-      - kaapi-db
-      - redis
-      - vault
-      - minio
+      faith-db:
+        condition: service_healthy
+      faith-redis:
+        condition: service_healthy
+      faith-vault:
+        condition: service_healthy
+      faith-minio:
+        condition: service_healthy
     networks:
-      - kaapi-network
+      - dokploy-network
 
-  celery:
-    # PAS DE SECTION 'build'. CE SERVICE UTILISE L'IMAGE EXISTANTE.
-    image: kaapi-app:latest
-    container_name: kaapi-celery
+  faith-celery:
+    image: faith-api:latest
+    restart: always
     command: python -m celery -A app.core.celery worker --loglevel=info
-    volumes:
-      - .:/app
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@kaapi-db:5432/kaapi
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=development
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=dev-token
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kaapi
+      POSTGRES_HOST: faith-db
+      REDIS_HOST: faith-redis
+      REDIS_PORT: 6379
+      ENVIRONMENT: production
+      VAULT_ADDR: http://faith-vault:8200
+      VAULT_TOKEN: dev-token
     depends_on:
-      - api # S'assure que 'api' est prêt avant de démarrer
-      - kaapi-db
-      - redis
-      - vault
+      faith-api:
+        condition: service_started
+      faith-db:
+        condition: service_healthy
+      faith-redis:
+        condition: service_healthy
+      faith-vault:
+        condition: service_healthy
     networks:
-      - kaapi-network
+      - dokploy-network
 
-  metrics:
-    # PAS DE SECTION 'build'. CE SERVICE UTILISE L'IMAGE EXISTANTE.
-    image: kaapi-app:latest
-    container_name: kaapi-metrics
+  faith-metrics:
+    image: faith-api:latest
+    restart: always
     command: python app/metrics_server.py
-    ports:
-      - "8001:8001"
-    volumes:
-      - .:/app
-    environment:
-      - PYTHONUNBUFFERED=1
-    restart: always
+    env_file:
+      - .env
     depends_on:
-      - api # S'assure que 'api' est prêt avant de démarrer
-      - kaapi-db
-      - redis
-      - vault
+      faith-api:
+        condition: service_started
     networks:
-      - kaapi-network
+      - dokploy-network
 
-  # --- LES SERVICES DE BASE RESTENT INCHANGÉS ---
-  kaapi-db:
+  faith-db:
     image: postgres:15-alpine
-    container_name: kaapi-db
     restart: always
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=kaapi
-    ports:
-      - "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kaapi
+    volumes:
+      - faith_postgres_data:/var/lib/postgresql/data/
     networks:
-      - kaapi-network
-    # Pour le depends_on de celery et metrics, un healthcheck est une bonne pratique
+      - dokploy-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d kaapi"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  kaapi-db-backup:
-    image: prodrigestivill/postgres-backup-local
-    container_name: kaapi-db-backup
-    restart: always
-    environment:
-      - POSTGRES_HOST=kaapi-db
-      - POSTGRES_DB=kaapi
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_EXTRA_OPTS=--schema=public --blobs
-      - SCHEDULE=0 0 * * *       # chaque jour à minuit
-      - BACKUP_KEEP_DAYS=7
-      - BACKUP_KEEP_WEEKS=4
-      - BACKUP_KEEP_MONTHS=6
-      - HEALTHCHECK_CMD=pg_isready -U postgres -h kaapi-db
-      - HEALTHCHECK_TIMEOUT=10s
-      - HEALTHCHECK_INTERVAL=10s
-    volumes:
-      - ./postgres_backups:/backups
-    depends_on:
-      kaapi-db:
-        condition: service_healthy
-    networks:
-      - kaapi-network
-
-
-  redis:
+  faith-redis:
     image: redis:7-alpine
-    container_name: kaapi-redis
-    ports:
-      - "6379"
+    restart: always
     networks:
-      - kaapi-network
+      - dokploy-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  vault:
+  faith-vault:
     image: hashicorp/vault:latest
-    container_name: kaapi-vault
-    ports:
-      - "8200:8200"
+    restart: always
     environment:
-      - VAULT_DEV_ROOT_TOKEN_ID=dev-token
-      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+      VAULT_DEV_ROOT_TOKEN_ID: dev-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://127.0.0.1:8200
     cap_add:
       - IPC_LOCK
-    networks:
-      - kaapi-network
-
-  minio:
-    image: minio/minio:latest
-    container_name: kaapi-minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     volumes:
-      - minio_data:/data
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+      - faith_vault_data:/vault/file
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  faith-minio:
+    image: minio/minio:latest
+    restart: always
     command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - faith_minio_data:/data
+    networks:
+      - dokploy-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
+      interval: 10s
+      timeout: 10s
       retries: 3
-    networks:
-      - kaapi-network
 
 volumes:
-  postgres_data:
-  minio_data:
+  faith_postgres_data:
+  faith_minio_data:
+  faith_vault_data:
 
 networks:
-  kaapi-network:
-    driver: bridge
+  dokploy-network:
+    external: true
