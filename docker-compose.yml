@@ -33,7 +33,9 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_SECURE: "false"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # create_db (idempotent) crée le schéma + sème rôles et comptes démo,
+    # puis lance l'API. Évite toute étape manuelle après le déploiement.
+    command: sh -c "python -m app.create_db && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     depends_on:
       faith-db:
         condition: service_healthy
