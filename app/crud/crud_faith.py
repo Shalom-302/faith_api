@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.faith import (
     Answer, Friendship, Message, Question, Sermon, SermonComment, SermonLike,
-    Testimony,
+    Testimony, TestimonyComment, TestimonyLike,
 )
 from app.schemas import faith as schemas
 
@@ -50,11 +50,16 @@ class CRUDSermon:
         return result.scalars().first()
 
     async def get_all(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+        author_id: Optional[uuid.UUID] = None,
     ) -> List[Sermon]:
-        result = await db.execute(
-            select(Sermon).order_by(Sermon.created_at.desc()).offset(skip).limit(limit)
-        )
+        query = select(Sermon).order_by(Sermon.created_at.desc())
+        if author_id is not None:
+            query = query.filter(Sermon.user_id == author_id)
+        result = await db.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def update(
@@ -153,14 +158,16 @@ class CRUDTestimony:
         return result.scalars().first()
 
     async def get_all(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+        author_id: Optional[uuid.UUID] = None,
     ) -> List[Testimony]:
-        result = await db.execute(
-            select(Testimony)
-            .order_by(Testimony.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+        query = select(Testimony).order_by(Testimony.created_at.desc())
+        if author_id is not None:
+            query = query.filter(Testimony.user_id == author_id)
+        result = await db.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def update(
@@ -174,6 +181,68 @@ class CRUDTestimony:
 
     async def remove(self, db: AsyncSession, db_testimony: Testimony) -> None:
         await db.delete(db_testimony)
+        await db.commit()
+
+
+class CRUDTestimonyLike:
+    async def get(
+        self, db: AsyncSession, *, user_id: uuid.UUID, testimony_id: uuid.UUID
+    ) -> Optional[TestimonyLike]:
+        result = await db.execute(
+            select(TestimonyLike).filter(
+                TestimonyLike.user_id == user_id,
+                TestimonyLike.testimony_id == testimony_id,
+            )
+        )
+        return result.scalars().first()
+
+    async def create(
+        self, db: AsyncSession, *, user_id: uuid.UUID, testimony_id: uuid.UUID
+    ) -> TestimonyLike:
+        db_like = TestimonyLike(user_id=user_id, testimony_id=testimony_id)
+        db.add(db_like)
+        await db.commit()
+        await db.refresh(db_like)
+        return db_like
+
+    async def remove(self, db: AsyncSession, db_like: TestimonyLike) -> None:
+        await db.delete(db_like)
+        await db.commit()
+
+
+class CRUDTestimonyComment:
+    async def create(
+        self, db: AsyncSession, *, user_id: uuid.UUID, testimony_id: uuid.UUID,
+        content: str,
+    ) -> TestimonyComment:
+        db_comment = TestimonyComment(
+            user_id=user_id, testimony_id=testimony_id, content=content
+        )
+        db.add(db_comment)
+        await db.commit()
+        await db.refresh(db_comment)
+        return db_comment
+
+    async def get(
+        self, db: AsyncSession, comment_id: uuid.UUID
+    ) -> Optional[TestimonyComment]:
+        result = await db.execute(
+            select(TestimonyComment).filter(TestimonyComment.id == comment_id)
+        )
+        return result.scalars().first()
+
+    async def get_by_testimony(
+        self, db: AsyncSession, testimony_id: uuid.UUID
+    ) -> List[TestimonyComment]:
+        result = await db.execute(
+            select(TestimonyComment)
+            .filter(TestimonyComment.testimony_id == testimony_id)
+            .order_by(TestimonyComment.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def remove(self, db: AsyncSession, db_comment: TestimonyComment) -> None:
+        await db.delete(db_comment)
         await db.commit()
 
 
@@ -198,14 +267,16 @@ class CRUDQuestion:
         return result.scalars().first()
 
     async def get_all(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+        author_id: Optional[uuid.UUID] = None,
     ) -> List[Question]:
-        result = await db.execute(
-            select(Question)
-            .order_by(Question.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+        query = select(Question).order_by(Question.created_at.desc())
+        if author_id is not None:
+            query = query.filter(Question.user_id == author_id)
+        result = await db.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def update(
@@ -402,6 +473,8 @@ crud_sermon = CRUDSermon()
 crud_sermon_like = CRUDSermonLike()
 crud_sermon_comment = CRUDSermonComment()
 crud_testimony = CRUDTestimony()
+crud_testimony_like = CRUDTestimonyLike()
+crud_testimony_comment = CRUDTestimonyComment()
 crud_question = CRUDQuestion()
 crud_answer = CRUDAnswer()
 crud_friendship = CRUDFriendship()

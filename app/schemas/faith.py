@@ -97,6 +97,9 @@ class TestimonyResponse(TestimonyBase):
     id: uuid.UUID
     author: UserMini
     created_at: datetime.datetime
+    like_count: int = 0
+    comment_count: int = 0
+    is_liked: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

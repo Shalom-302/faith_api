@@ -18,15 +18,20 @@ router = APIRouter()
 # --- Questions ---
 @router.get(
     "", response_model=List[schemas.QuestionResponse],
-    summary="Lister les questions de foi",
+    summary="Lister les questions de foi (filtrable par auteur)",
 )
 async def list_questions(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
+    author_id: uuid.UUID | None = Query(
+        None, description="Si fourni, ne renvoie que les questions de cet auteur."
+    ),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await faith_service.list_questions(db, skip=skip, limit=limit)
+    return await faith_service.list_questions(
+        db, skip=skip, limit=limit, author_id=author_id
+    )
 
 
 @router.post(
