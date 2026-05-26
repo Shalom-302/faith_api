@@ -108,9 +108,15 @@ def _to_sermon_response(sermon, current_user_id: uuid.UUID) -> schemas.SermonRes
 # SERMONS
 # ===========================================================================
 async def list_sermons(
-    db: AsyncSession, current_user, skip: int = 0, limit: int = 100
+    db: AsyncSession,
+    current_user,
+    skip: int = 0,
+    limit: int = 100,
+    author_id: uuid.UUID | None = None,
 ) -> List[schemas.SermonResponse]:
-    sermons = await crud_sermon.get_all(db, skip=skip, limit=limit)
+    sermons = await crud_sermon.get_all(
+        db, skip=skip, limit=limit, author_id=author_id
+    )
     return [_to_sermon_response(s, current_user.id) for s in sermons]
 
 
@@ -234,9 +240,15 @@ def _to_testimony_response(t, current_user_id: uuid.UUID) -> schemas.TestimonyRe
 
 
 async def list_testimonies(
-    db: AsyncSession, current_user, skip: int = 0, limit: int = 100
+    db: AsyncSession,
+    current_user,
+    skip: int = 0,
+    limit: int = 100,
+    author_id: uuid.UUID | None = None,
 ) -> List[schemas.TestimonyResponse]:
-    testimonies = await crud_testimony.get_all(db, skip=skip, limit=limit)
+    testimonies = await crud_testimony.get_all(
+        db, skip=skip, limit=limit, author_id=author_id
+    )
     return [_to_testimony_response(t, current_user.id) for t in testimonies]
 
 
@@ -365,9 +377,14 @@ def _to_question_response(q) -> schemas.QuestionResponse:
 
 
 async def list_questions(
-    db: AsyncSession, skip: int = 0, limit: int = 100
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 100,
+    author_id: uuid.UUID | None = None,
 ) -> List[schemas.QuestionResponse]:
-    questions = await crud_question.get_all(db, skip=skip, limit=limit)
+    questions = await crud_question.get_all(
+        db, skip=skip, limit=limit, author_id=author_id
+    )
     return [_to_question_response(q) for q in questions]
 
 

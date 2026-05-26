@@ -18,15 +18,20 @@ router = APIRouter()
 # --- READ ---
 @router.get(
     "", response_model=List[schemas.SermonResponse],
-    summary="Lister les prédications du feed",
+    summary="Lister les prédications du feed (filtrable par auteur)",
 )
 async def list_sermons(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
+    author_id: uuid.UUID | None = Query(
+        None, description="Si fourni, ne renvoie que les prédications de cet auteur."
+    ),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await faith_service.list_sermons(db, current_user, skip=skip, limit=limit)
+    return await faith_service.list_sermons(
+        db, current_user, skip=skip, limit=limit, author_id=author_id
+    )
 
 
 @router.get(

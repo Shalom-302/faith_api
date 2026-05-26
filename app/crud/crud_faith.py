@@ -50,11 +50,16 @@ class CRUDSermon:
         return result.scalars().first()
 
     async def get_all(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+        author_id: Optional[uuid.UUID] = None,
     ) -> List[Sermon]:
-        result = await db.execute(
-            select(Sermon).order_by(Sermon.created_at.desc()).offset(skip).limit(limit)
-        )
+        query = select(Sermon).order_by(Sermon.created_at.desc())
+        if author_id is not None:
+            query = query.filter(Sermon.user_id == author_id)
+        result = await db.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def update(
@@ -153,14 +158,16 @@ class CRUDTestimony:
         return result.scalars().first()
 
     async def get_all(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+        author_id: Optional[uuid.UUID] = None,
     ) -> List[Testimony]:
-        result = await db.execute(
-            select(Testimony)
-            .order_by(Testimony.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+        query = select(Testimony).order_by(Testimony.created_at.desc())
+        if author_id is not None:
+            query = query.filter(Testimony.user_id == author_id)
+        result = await db.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def update(
@@ -260,14 +267,16 @@ class CRUDQuestion:
         return result.scalars().first()
 
     async def get_all(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+        author_id: Optional[uuid.UUID] = None,
     ) -> List[Question]:
-        result = await db.execute(
-            select(Question)
-            .order_by(Question.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+        query = select(Question).order_by(Question.created_at.desc())
+        if author_id is not None:
+            query = query.filter(Question.user_id == author_id)
+        result = await db.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def update(
