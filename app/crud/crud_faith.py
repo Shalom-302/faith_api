@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.faith import (
     Answer, Friendship, Message, Question, Sermon, SermonComment, SermonLike,
-    Testimony,
+    Testimony, TestimonyComment, TestimonyLike,
 )
 from app.schemas import faith as schemas
 
@@ -174,6 +174,68 @@ class CRUDTestimony:
 
     async def remove(self, db: AsyncSession, db_testimony: Testimony) -> None:
         await db.delete(db_testimony)
+        await db.commit()
+
+
+class CRUDTestimonyLike:
+    async def get(
+        self, db: AsyncSession, *, user_id: uuid.UUID, testimony_id: uuid.UUID
+    ) -> Optional[TestimonyLike]:
+        result = await db.execute(
+            select(TestimonyLike).filter(
+                TestimonyLike.user_id == user_id,
+                TestimonyLike.testimony_id == testimony_id,
+            )
+        )
+        return result.scalars().first()
+
+    async def create(
+        self, db: AsyncSession, *, user_id: uuid.UUID, testimony_id: uuid.UUID
+    ) -> TestimonyLike:
+        db_like = TestimonyLike(user_id=user_id, testimony_id=testimony_id)
+        db.add(db_like)
+        await db.commit()
+        await db.refresh(db_like)
+        return db_like
+
+    async def remove(self, db: AsyncSession, db_like: TestimonyLike) -> None:
+        await db.delete(db_like)
+        await db.commit()
+
+
+class CRUDTestimonyComment:
+    async def create(
+        self, db: AsyncSession, *, user_id: uuid.UUID, testimony_id: uuid.UUID,
+        content: str,
+    ) -> TestimonyComment:
+        db_comment = TestimonyComment(
+            user_id=user_id, testimony_id=testimony_id, content=content
+        )
+        db.add(db_comment)
+        await db.commit()
+        await db.refresh(db_comment)
+        return db_comment
+
+    async def get(
+        self, db: AsyncSession, comment_id: uuid.UUID
+    ) -> Optional[TestimonyComment]:
+        result = await db.execute(
+            select(TestimonyComment).filter(TestimonyComment.id == comment_id)
+        )
+        return result.scalars().first()
+
+    async def get_by_testimony(
+        self, db: AsyncSession, testimony_id: uuid.UUID
+    ) -> List[TestimonyComment]:
+        result = await db.execute(
+            select(TestimonyComment)
+            .filter(TestimonyComment.testimony_id == testimony_id)
+            .order_by(TestimonyComment.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def remove(self, db: AsyncSession, db_comment: TestimonyComment) -> None:
+        await db.delete(db_comment)
         await db.commit()
 
 
@@ -402,6 +464,8 @@ crud_sermon = CRUDSermon()
 crud_sermon_like = CRUDSermonLike()
 crud_sermon_comment = CRUDSermonComment()
 crud_testimony = CRUDTestimony()
+crud_testimony_like = CRUDTestimonyLike()
+crud_testimony_comment = CRUDTestimonyComment()
 crud_question = CRUDQuestion()
 crud_answer = CRUDAnswer()
 crud_friendship = CRUDFriendship()

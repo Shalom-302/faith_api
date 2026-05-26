@@ -126,9 +126,60 @@ class Testimony(Base):
     )
 
     author: Mapped["User"] = relationship("User", lazy="selectin")
+    likes: Mapped[List["TestimonyLike"]] = relationship(
+        back_populates="testimony", cascade="all, delete-orphan", lazy="selectin"
+    )
+    comments: Mapped[List["TestimonyComment"]] = relationship(
+        back_populates="testimony", cascade="all, delete-orphan", lazy="selectin"
+    )
 
     def __repr__(self) -> str:
         return f"<Testimony(id={self.id})>"
+
+
+class TestimonyLike(Base):
+    """Un « j'aime » posé par un utilisateur sur un témoignage."""
+    __tablename__ = "faith_testimony_likes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "testimony_id", name="uq_faith_testimony_like"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user.id"), nullable=False, index=True
+    )
+    testimony_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("faith_testimonies.id"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    testimony: Mapped["Testimony"] = relationship(back_populates="likes")
+
+
+class TestimonyComment(Base):
+    """Un commentaire posté sur un témoignage."""
+    __tablename__ = "faith_testimony_comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user.id"), nullable=False, index=True
+    )
+    testimony_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("faith_testimonies.id"), nullable=False, index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    testimony: Mapped["Testimony"] = relationship(back_populates="comments")
+    author: Mapped["User"] = relationship("User", lazy="selectin")
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +308,8 @@ FAITH_TABLES = [
     SermonLike.__table__,
     SermonComment.__table__,
     Testimony.__table__,
+    TestimonyLike.__table__,
+    TestimonyComment.__table__,
     Question.__table__,
     Answer.__table__,
     Friendship.__table__,

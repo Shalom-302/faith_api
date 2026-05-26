@@ -24,6 +24,7 @@ from sqlalchemy.orm import selectinload
 from app.crud.crud_faith import (
     crud_answer, crud_friendship, crud_message, crud_question, crud_sermon,
     crud_sermon_comment, crud_sermon_like, crud_testimony,
+    crud_testimony_comment, crud_testimony_like,
 )
 from app.plugins.advanced_auth.models import Role, User
 from app.schemas import faith as schemas
@@ -222,18 +223,30 @@ async def delete_sermon_comment(
 # ===========================================================================
 # TÉMOIGNAGES
 # ===========================================================================
-async def list_testimonies(
-    db: AsyncSession, skip: int = 0, limit: int = 100
-) -> List[schemas.TestimonyResponse]:
-    testimonies = await crud_testimony.get_all(db, skip=skip, limit=limit)
-    return [_to_testimony_response(t) for t in testimonies]
-
-
-def _to_testimony_response(t) -> schemas.TestimonyResponse:
+def _to_testimony_response(t, current_user_id: uuid.UUID) -> schemas.TestimonyResponse:
     return schemas.TestimonyResponse(
         id=t.id, content=t.content, created_at=t.created_at,
         author=_user_mini(t.author),
+        like_count=len(t.likes),
+        comment_count=len(t.comments),
+        is_liked=any(like.user_id == current_user_id for like in t.likes),
     )
+
+
+async def list_testimonies(
+    db: AsyncSession, current_user, skip: int = 0, limit: int = 100
+) -> List[schemas.TestimonyResponse]:
+    testimonies = await crud_testimony.get_all(db, skip=skip, limit=limit)
+    return [_to_testimony_response(t, current_user.id) for t in testimonies]
+
+
+async def get_testimony(
+    db: AsyncSession, testimony_id: uuid.UUID, current_user
+) -> schemas.TestimonyResponse:
+    testimony = await crud_testimony.get(db, testimony_id)
+    if not testimony:
+        raise HTTPException(status_code=404, detail="Témoignage non trouvé.")
+    return _to_testimony_response(testimony, current_user.id)
 
 
 async def create_testimony(
@@ -242,12 +255,8 @@ async def create_testimony(
     testimony = await crud_testimony.create(
         db, user_id=current_user.id, testimony_in=testimony_in
     )
-    return schemas.TestimonyResponse(
-        id=testimony.id,
-        content=testimony.content,
-        created_at=testimony.created_at,
-        author=_user_mini(current_user),
-    )
+    testimony = await crud_testimony.get(db, testimony.id)  # recharge les relations
+    return _to_testimony_response(testimony, current_user.id)
 
 
 async def update_testimony(
@@ -259,7 +268,8 @@ async def update_testimony(
         raise HTTPException(status_code=404, detail="Témoignage non trouvé.")
     _require_owner_or_admin(current_user, testimony.user_id)
     testimony = await crud_testimony.update(db, testimony, testimony_in)
-    return _to_testimony_response(testimony)
+    testimony = await crud_testimony.get(db, testimony_id)
+    return _to_testimony_response(testimony, current_user.id)
 
 
 async def delete_testimony(
@@ -270,6 +280,74 @@ async def delete_testimony(
         raise HTTPException(status_code=404, detail="Témoignage non trouvé.")
     _require_owner_or_admin(current_user, testimony.user_id)
     await crud_testimony.remove(db, testimony)
+
+
+async def toggle_testimony_like(
+    db: AsyncSession, testimony_id: uuid.UUID, current_user
+) -> dict:
+    """Ajoute ou retire le « j'aime » de l'utilisateur sur un témoignage."""
+    testimony = await crud_testimony.get(db, testimony_id)
+    if not testimony:
+        raise HTTPException(status_code=404, detail="Témoignage non trouvé.")
+
+    existing = await crud_testimony_like.get(
+        db, user_id=current_user.id, testimony_id=testimony_id
+    )
+    if existing:
+        await crud_testimony_like.remove(db, existing)
+        is_liked = False
+    else:
+        await crud_testimony_like.create(
+            db, user_id=current_user.id, testimony_id=testimony_id
+        )
+        is_liked = True
+
+    testimony = await crud_testimony.get(db, testimony_id)
+    return {"is_liked": is_liked, "like_count": len(testimony.likes)}
+
+
+async def list_testimony_comments(
+    db: AsyncSession, testimony_id: uuid.UUID
+) -> List[schemas.CommentResponse]:
+    comments = await crud_testimony_comment.get_by_testimony(db, testimony_id)
+    return [
+        schemas.CommentResponse(
+            id=c.id,
+            content=c.content,
+            created_at=c.created_at,
+            author=_user_mini(c.author),
+        )
+        for c in comments
+    ]
+
+
+async def add_testimony_comment(
+    db: AsyncSession, testimony_id: uuid.UUID, current_user,
+    comment_in: schemas.CommentCreate,
+) -> schemas.CommentResponse:
+    testimony = await crud_testimony.get(db, testimony_id)
+    if not testimony:
+        raise HTTPException(status_code=404, detail="Témoignage non trouvé.")
+    comment = await crud_testimony_comment.create(
+        db, user_id=current_user.id, testimony_id=testimony_id,
+        content=comment_in.content,
+    )
+    return schemas.CommentResponse(
+        id=comment.id,
+        content=comment.content,
+        created_at=comment.created_at,
+        author=_user_mini(current_user),
+    )
+
+
+async def delete_testimony_comment(
+    db: AsyncSession, comment_id: uuid.UUID, current_user
+) -> None:
+    comment = await crud_testimony_comment.get(db, comment_id)
+    if not comment:
+        raise HTTPException(status_code=404, detail="Commentaire non trouvé.")
+    _require_owner_or_admin(current_user, comment.user_id)
+    await crud_testimony_comment.remove(db, comment)
 
 
 # ===========================================================================
